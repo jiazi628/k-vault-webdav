@@ -498,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
       debugBtn.textContent = 'Debug Config';
       debugBtn.className = 'btn btn-ghost btn-sm';
       debugBtn.onclick = checkBackendConfig;
+      // Insert at beginning
       toolbar.insertBefore(debugBtn, toolbar.firstChild);
     }
   }, 1000);
