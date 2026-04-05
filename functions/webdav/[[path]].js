@@ -28,6 +28,11 @@ export async function onRequest(context) {
   const method = request.method.toUpperCase();
   const path = normalizePath(params.path || '');
 
+  // Debug endpoint
+  if (path === 'debug-config' && method === 'GET') {
+    return handleDebugConfig(request, env);
+  }
+
   if (!isWebDAVEnabled(env)) {
     return errorResponse('WebDAV is not enabled', 501);
   }
@@ -73,6 +78,27 @@ export async function onRequest(context) {
     console.error('WebDAV error:', error);
     return errorResponse(error.message || 'Internal server error', 500);
   }
+}
+
+async function handleDebugConfig(request, env) {
+  const hasBotToken = !!env.TG_BOT_TOKEN;
+  const hasChatId = !!env.TG_CHAT_ID;
+  const kvBound = !!env.img_url;
+  
+  const data = {
+    webdavEnabled: env.WEBDAV_ENABLED !== 'false',
+    kvBinding: kvBound,
+    telegramBotToken: hasBotToken ? 'SET' : 'NOT SET',
+    telegramChatId: hasChatId ? 'SET' : 'NOT SET',
+    basicAuthRequired: isAuthRequired(env),
+    basicAuthUserSet: !!env.BASIC_USER,
+    basicAuthPassSet: !!env.BASIC_PASS,
+  };
+  
+  return new Response(JSON.stringify(data, null, 2), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 function normalizePath(path) {

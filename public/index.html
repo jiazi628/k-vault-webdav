@@ -469,29 +469,39 @@ document.getElementById('username').addEventListener('keydown', e => { if (e.key
 // Enter key on modal
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('show')) modalAction(); });
 
-// Auto login / skip if no auth
-(async function() {
+// Debug: Check backend config
+async function checkBackendConfig() {
   try {
-    const res = await fetch(WEBDAV_PATH + '/', { method: 'PROPFIND', headers: { 'Depth': '0' } });
-    if (res.ok || res.status === 207) {
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app').style.display = 'block';
-      navigate('');
-      return;
-    }
-    if (res.status === 401) {
-      // Auth required, show login
-      return;
-    }
-    if (res.status === 500) {
-      toast('Server error: ' + res.statusText, 'error');
-      return;
+    const res = await fetch(WEBDAV_PATH + '/debug-config', { 
+      method: 'GET',
+      headers: authHeader() 
+    });
+    if (res.ok) {
+      const data = await res.json();
+      alert('Backend config:\n' + JSON.stringify(data, null, 2));
+    } else {
+      const err = await res.text();
+      alert('Failed to check config: ' + res.status + '\n' + err);
     }
   } catch (e) {
-    toast('Connection failed: ' + e.message, 'error');
+    alert('Error checking config: ' + e.message);
   }
-  // Show login screen by default
-})();
+}
+
+// Add debug button to toolbar
+document.addEventListener('DOMContentLoaded', function() {
+  // Add debug button after existing toolbar elements
+  setTimeout(() => {
+    const toolbar = document.querySelector('.toolbar');
+    if (toolbar) {
+      const debugBtn = document.createElement('button');
+      debugBtn.textContent = 'Debug Config';
+      debugBtn.className = 'btn btn-ghost btn-sm';
+      debugBtn.onclick = checkBackendConfig;
+      toolbar.insertBefore(debugBtn, toolbar.firstChild);
+    }
+  }, 1000);
+});
 </script>
 </body>
 </html>
