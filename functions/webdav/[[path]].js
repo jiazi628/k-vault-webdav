@@ -393,7 +393,12 @@ async function handlePut(request, env, path) {
     return errorResponse('Cannot put to root', 400);
   }
 
-  if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) {
+  const hasBotToken = !!env.TG_BOT_TOKEN;
+  const hasChatId = !!env.TG_CHAT_ID;
+  console.log(`[WebDAV PUT] TG_BOT_TOKEN present: ${hasBotToken}, TG_CHAT_ID present: ${hasChatId}`);
+
+  if (!hasBotToken || !hasChatId) {
+    console.log('[WebDAV PUT] Missing Telegram config');
     return errorResponse('Storage not configured. Set TG_BOT_TOKEN and TG_CHAT_ID in environment variables.', 500);
   }
 
@@ -407,12 +412,15 @@ async function handlePut(request, env, path) {
 }
 
 async function uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash) {
+  console.log(`[WebDAV PUT] Starting upload to Telegram: ${fileName}`);
+
   const blob = new Blob([arrayBuffer], { type: request.headers.get('Content-Type') || 'application/octet-stream' });
   const file = new File([blob], fileName, { type: blob.type });
 
   let telegramResult;
   try {
     telegramResult = await uploadToTelegram(file, fileName, env);
+    console.log(`[WebDAV PUT] Telegram upload successful: fileId=${telegramResult.fileId}`);
   } catch (e) {
     console.error('Telegram upload error:', e.message);
     return errorResponse('Telegram upload failed: ' + e.message, 500);
