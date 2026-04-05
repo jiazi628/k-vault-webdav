@@ -463,17 +463,28 @@ document.getElementById('username').addEventListener('keydown', e => { if (e.key
 // Enter key on modal
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('show')) modalAction(); });
 
-// Auto login
-(function() {
-  const saved = localStorage.getItem('webdav_creds');
-  if (saved) {
-    try {
-      creds = JSON.parse(saved);
+// Auto login / skip if no auth
+(async function() {
+  try {
+    const res = await fetch(WEBDAV_PATH + '/', { method: 'PROPFIND', headers: { 'Depth': '0' } });
+    if (res.ok || res.status === 207) {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'block';
       navigate('');
-    } catch {}
+      return;
+    }
+    if (res.status === 401) {
+      // Auth required, show login
+      return;
+    }
+    if (res.status === 500) {
+      toast('Server error: ' + res.statusText, 'error');
+      return;
+    }
+  } catch (e) {
+    toast('Connection failed: ' + e.message, 'error');
   }
+  // Show login screen by default
 })();
 </script>
 </body>

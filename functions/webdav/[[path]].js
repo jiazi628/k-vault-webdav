@@ -135,17 +135,31 @@ async function handlePropfind(request, env, path) {
   const parsed = parsePropfindBody(body);
 
   if (path === '' || path === '/') {
-    return listRoot(env, parsed, depth);
+    try {
+      return listRoot(env, parsed, depth);
+    } catch (e) {
+      console.error('listRoot error:', e);
+      // Return empty root if KV fails
+      return createPropfindResponse([{
+        path: '/', name: 'root', type: 'folder', size: 0,
+        created: Date.now(), modified: Date.now(),
+        contentType: 'httpd/unix-directory',
+      }], 207);
+    }
   }
 
-  const folderMarker = await env.img_url.getWithMetadata(`${FOLDER_MARKER_PREFIX}${path}`);
-  if (folderMarker?.metadata) {
-    return listFolder(env, path, parsed, depth);
-  }
+  try {
+    const folderMarker = await env.img_url.getWithMetadata(`${FOLDER_MARKER_PREFIX}${path}`);
+    if (folderMarker?.metadata) {
+      return listFolder(env, path, parsed, depth);
+    }
 
-  const fileRecord = await findFileRecord(env, path);
-  if (fileRecord) {
-    return listFile(env, fileRecord, parsed);
+    const fileRecord = await findFileRecord(env, path);
+    if (fileRecord) {
+      return listFile(env, fileRecord, parsed);
+    }
+  } catch (e) {
+    console.error('propfind lookup error:', e);
   }
 
   return errorResponse('Not Found', 404);
@@ -780,15 +794,20 @@ async function findFileRecord(env, fileName) {
 
 async function listAllKeys(env, prefix = '') {
   const allKeys = [];
+  if (!env.img_url) return allKeys;
   let cursor = undefined;
   let guard = 0;
 
-  do {
-    const page = await env.img_url.list({ limit: 1000, cursor, prefix: prefix || undefined });
-    allKeys.push(...(page.keys || []));
-    cursor = page.list_complete ? undefined : page.cursor;
-    guard += 1;
-  } while (cursor && guard < 100);
+  try {
+    do {
+      const page = await env.img_url.list({ limit: 1000, cursor, prefix: prefix || undefined });
+      allKeys.push(...(page.keys || []));
+      cursor = page.list_complete ? undefined : page.cursor;
+      guard += 1;
+    } while (cursor && guard < 100);
+  } catch (e) {
+    console.error('listAllKeys error:', e);
+  }
 
   return allKeys;
 }
