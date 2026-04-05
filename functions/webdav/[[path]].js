@@ -419,9 +419,9 @@ async function handlePut(request, env, path) {
     return errorResponse('Cannot put to root', 400);
   }
 
-  const hasBotToken = !!env.TG_BOT_TOKEN;
-  const hasChatId = !!env.TG_CHAT_ID;
-  console.log(`[WebDAV PUT] TG_BOT_TOKEN present: ${hasBotToken}, TG_CHAT_ID present: ${hasChatId}`);
+  const hasBotToken = !!env.TG_BOT_TOKEN && String(env.TG_BOT_TOKEN).trim() !== '';
+  const hasChatId = !!env.TG_CHAT_ID && String(env.TG_CHAT_ID).trim() !== '';
+  console.log(`[WebDAV PUT] TG_BOT_TOKEN: '${env.TG_BOT_TOKEN}' (present: ${hasBotToken}), TG_CHAT_ID: '${env.TG_CHAT_ID}' (present: ${hasChatId})`);
 
   if (!hasBotToken || !hasChatId) {
     console.log('[WebDAV PUT] Missing Telegram config');
