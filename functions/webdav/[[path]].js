@@ -393,17 +393,17 @@ async function handlePut(request, env, path) {
     return errorResponse('Cannot put to root', 400);
   }
 
+  if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) {
+    return errorResponse('Storage not configured. Set TG_BOT_TOKEN and TG_CHAT_ID in environment variables.', 500);
+  }
+
   const fileName = path.split('/').pop();
   const folderPath = path.split('/').slice(0, -1).join('/');
 
   const arrayBuffer = await request.arrayBuffer();
   const fileHash = await computeFileHash(arrayBuffer);
 
-  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
-    return await uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash);
-  }
-
-  return errorResponse('No storage backend configured. Set TG_BOT_TOKEN and TG_CHAT_ID.', 500);
+  return await uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash);
 }
 
 async function uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash) {

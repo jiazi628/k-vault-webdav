@@ -321,7 +321,10 @@ async function downloadFile(path) {
   const url = WEBDAV_PATH + '/' + path;
   try {
     const res = await fetch(url, { headers: authHeader() });
-    if (!res.ok) throw new Error('Download failed');
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error('Status ' + res.status + (errText ? ': ' + errText : ''));
+    }
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -351,7 +354,10 @@ async function uploadFiles(files) {
 
     try {
       const res = await fetch(url, { method: 'PUT', headers: authHeader(), body: file });
-      if (!res.ok && res.status !== 201 && res.status !== 204) throw new Error('Status ' + res.status);
+      if (!res.ok && res.status !== 201 && res.status !== 204) {
+        const errText = await res.text().catch(() => '');
+        throw new Error('Status ' + res.status + (errText ? ': ' + errText : ''));
+      }
     } catch (e) {
       toast('Failed to upload ' + file.name + ': ' + e.message, 'error');
     }
