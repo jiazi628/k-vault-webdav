@@ -1,0 +1,13 @@
+{
+  "name": "k-vault-webdav",
+  "version": "1.0.0",
+  "description": "Cloudflare Pages WebDAV server based on K-Vault",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.63.0"
+  }
+}
