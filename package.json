@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler pages dev",
+    "setup": "node setup.mjs",
     "deploy": "wrangler pages deploy"
   },
   "devDependencies": {
