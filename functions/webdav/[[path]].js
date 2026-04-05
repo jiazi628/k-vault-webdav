@@ -81,8 +81,10 @@ export async function onRequest(context) {
 }
 
 async function handleDebugConfig(request, env) {
-  const hasBotToken = !!env.TG_BOT_TOKEN;
-  const hasChatId = !!env.TG_CHAT_ID;
+  const botToken = env.TG_BOT_TOKEN || '';
+  const chatId = env.TG_CHAT_ID || env.TG_CHATID || '';
+  const hasBotToken = !!botToken && botToken.trim() !== '';
+  const hasChatId = !!chatId && chatId.trim() !== '';
   const kvBound = !!env.img_url;
   
   const data = {
@@ -90,6 +92,8 @@ async function handleDebugConfig(request, env) {
     kvBinding: kvBound,
     telegramBotToken: hasBotToken ? 'SET' : 'NOT SET',
     telegramChatId: hasChatId ? 'SET' : 'NOT SET',
+    telegramBotTokenValue: botToken.substring(0, 10) + '...' || '',
+    telegramChatIdValue: chatId,
     basicAuthRequired: isAuthRequired(env),
     basicAuthUserSet: !!env.BASIC_USER,
     basicAuthPassSet: !!env.BASIC_PASS,
@@ -419,13 +423,15 @@ async function handlePut(request, env, path) {
     return errorResponse('Cannot put to root', 400);
   }
 
-  const hasBotToken = !!env.TG_BOT_TOKEN && String(env.TG_BOT_TOKEN).trim() !== '';
-  const hasChatId = !!env.TG_CHAT_ID && String(env.TG_CHAT_ID).trim() !== '';
-  console.log(`[WebDAV PUT] TG_BOT_TOKEN: '${env.TG_BOT_TOKEN}' (present: ${hasBotToken}), TG_CHAT_ID: '${env.TG_CHAT_ID}' (present: ${hasChatId})`);
+  const botToken = env.TG_BOT_TOKEN || '';
+  const chatId = env.TG_CHAT_ID || env.TG_CHATID || '';
+  const hasBotToken = !!botToken && botToken.trim() !== '';
+  const hasChatId = !!chatId && chatId.trim() !== '';
+  console.log(`[WebDAV PUT] TG_BOT_TOKEN: '${botToken}' (present: ${hasBotToken}), TG_CHAT_ID/TG_CHATID: '${chatId}' (present: ${hasChatId})`);
 
   if (!hasBotToken || !hasChatId) {
     console.log('[WebDAV PUT] Missing Telegram config');
-    return errorResponse('Storage not configured. Set TG_BOT_TOKEN and TG_CHAT_ID in environment variables.', 500);
+    return errorResponse('Storage not configured. Set TG_BOT_TOKEN and TG_CHAT_ID (or TG_CHATID) in environment variables.', 500);
   }
 
   const fileName = path.split('/').pop();
