@@ -418,7 +418,8 @@ async function handlePut(request, env, path) {
 
 async function handleGet(request, env, path, isHead = false) {
   if (!path || path === '/') {
-    return errorResponse('Cannot get root', 400);
+    const html = `<!DOCTYPE html><html><head><title>K-Vault WebDAV</title><style>body{font-family:system-ui;max-width:600px;margin:60px auto;padding:0 20px;color:#333}h1{color:#6c5ce7}code{background:#f4f4f4;padding:2px 6px;border-radius:4px}pre{background:#f4f4f4;padding:16px;border-radius:8px;overflow-x:auto}.card{border:1px solid #eee;padding:20px;border-radius:12px;margin:20px 0}</style></head><body><h1>K-Vault WebDAV Server</h1><div class="card"><p>This is a WebDAV endpoint. Use a WebDAV client to connect:</p><pre>URL: ${new URL(request.url).origin}/webdav/</pre></div><h2>Supported Clients</h2><ul><li><strong>macOS Finder:</strong> Go → Connect to Server → <code>${new URL(request.url).origin}/webdav/</code></li><li><strong>Windows:</strong> Add network location → <code>${new URL(request.url).origin}/webdav/</code></li><li><strong>Rclone:</strong> Configure webdav remote with this URL</li><li><strong>Cyberduck:</strong> WebDAV (HTTPS) → <code>${new URL(request.url).hostname}</code> → Path: <code>/webdav/</code></li></ul><h2>API Methods</h2><table><tr><td><code>PROPFIND</code></td><td>List files</td></tr><tr><td><code>MKCOL</code></td><td>Create folder</td></tr><tr><td><code>PUT</code></td><td>Upload file</td></tr><tr><td><code>GET</code></td><td>Download file</td></tr><tr><td><code>DELETE</code></td><td>Delete file</td></tr></table><p style="margin-top:40px;color:#999"><a href="/">Back to Web Interface</a></p></body></html>`;
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
   const record = await findFileRecord(env, path);
