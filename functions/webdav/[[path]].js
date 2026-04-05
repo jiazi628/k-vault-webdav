@@ -14,8 +14,8 @@
  * - LOCK/UNLOCK: Lock support (basic)
  */
 
-import { escapeXml, buildPropfindResponse, parsePropfindBody } from './utils/webdav-xml.js';
-import { checkAuthentication, isAuthRequired, verifyBasicAuth } from './utils/auth.js';
+import { escapeXml, buildPropfindResponse, parsePropfindBody } from '../utils/webdav-xml.js';
+import { checkAuthentication, isAuthRequired, verifyBasicAuth } from '../utils/auth.js';
 
 const DAV_NS = 'DAV:';
 const NS_DAV = 'd';
