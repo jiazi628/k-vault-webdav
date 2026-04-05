@@ -3,11 +3,5 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "public"
 
-[[kv_namespaces]]
-binding = "img_url"
-id = ""
-
 [vars]
-BASIC_USER = "admin"
-BASIC_PASS = "password123"
 WEBDAV_ENABLED = "true"
