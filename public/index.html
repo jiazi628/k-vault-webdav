@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-Vault WebDAV</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #242836; --border: #2e3345;
+  --text: #e4e6f0; --text2: #8b8fa3; --primary: #6c5ce7; --primary-hover: #7c6ff7;
+  --danger: #e74c3c; --success: #2ecc71; --radius: 10px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--primary); text-decoration: none; }
+
+/* Login */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px; width: 100%; max-width: 400px; }
+.login-box h1 { font-size: 24px; margin-bottom: 8px; }
+.login-box p { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+.form-group input { width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
+.form-group input:focus { border-color: var(--primary); }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all .2s; }
+.btn-primary { background: var(--primary); color: #fff; width: 100%; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--text2); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+
+/* App */
+#app { display: none; }
+header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+header h1 { font-size: 18px; flex: 1; }
+.breadcrumb { display: flex; align-items: center; gap: 4px; flex: 1; overflow-x: auto; }
+.breadcrumb span { color: var(--text2); cursor: pointer; padding: 4px 8px; border-radius: 6px; white-space: nowrap; font-size: 14px; }
+.breadcrumb span:hover { background: var(--surface2); }
+.breadcrumb span.active { color: var(--text); background: var(--surface2); }
+.breadcrumb .sep { color: var(--text2); cursor: default; padding: 0; }
+.breadcrumb .sep:hover { background: transparent; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.toolbar .spacer { flex: 1; }
+.search-box { padding: 8px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; width: 240px; outline: none; }
+.search-box:focus { border-color: var(--primary); }
+
+/* File list */
+.file-list { padding: 8px 20px; }
+.file-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; cursor: pointer; transition: background .15s; }
+.file-item:hover { background: var(--surface2); }
+.file-item .icon { font-size: 20px; width: 32px; text-align: center; flex-shrink: 0; }
+.file-item .name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item .size { color: var(--text2); font-size: 12px; min-width: 80px; text-align: right; }
+.file-item .date { color: var(--text2); font-size: 12px; min-width: 120px; text-align: right; }
+.file-item .actions { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
+.file-item:hover .actions { opacity: 1; }
+.file-item .actions button { background: var(--bg); border: 1px solid var(--border); color: var(--text2); padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; }
+.file-item .actions button:hover { color: var(--text); border-color: var(--text2); }
+
+/* Upload area */
+.upload-area { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px; text-align: center; margin: 20px; transition: all .2s; }
+.upload-area.dragover { border-color: var(--primary); background: rgba(108,92,231,.08); }
+.upload-area p { color: var(--text2); margin-bottom: 12px; }
+.upload-area .btn { display: inline-block; }
+.upload-progress { margin-top: 12px; }
+.upload-progress .bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.upload-progress .bar .fill { height: 100%; background: var(--primary); transition: width .3s; }
+.upload-progress .text { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 100%; max-width: 400px; }
+.modal h2 { font-size: 16px; margin-bottom: 16px; }
+.modal .form-group { margin-bottom: 12px; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* Toast */
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 20px; border-radius: 8px; font-size: 13px; animation: slideIn .3s; }
+.toast.success { background: var(--success); color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
+.toast.info { background: var(--primary); color: #fff; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.empty { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .file-item .date { display: none; }
+  .search-box { width: 140px; }
+  .file-item .actions { opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>K-Vault WebDAV</h1>
+    <p>Enter your credentials to access your vault</p>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="password" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <h1>K-Vault</h1>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Logout</button>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-input').click()">Upload</button>
+    <button class="btn btn-ghost btn-sm" onclick="showNewFolderModal()">New Folder</button>
+    <input type="file" id="file-input" multiple hidden onchange="handleFileSelect(event)">
+    <div class="spacer"></div>
+    <input type="text" class="search-box" placeholder="Search files..." id="search-input" oninput="filterFiles()">
+    <button class="btn btn-ghost btn-sm" onclick="refresh()">Refresh</button>
+  </div>
+
+  <div class="upload-area" id="upload-area">
+    <p>Drag & drop files here to upload</p>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('file-input').click()">Browse Files</button>
+    <div class="upload-progress" id="upload-progress" style="display:none">
+      <div class="bar"><div class="fill" id="upload-fill"></div></div>
+      <div class="text" id="upload-text"></div>
+    </div>
+  </div>
+
+  <div class="file-list" id="file-list"></div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal">
+    <h2 id="modal-title"></h2>
+    <div id="modal-body"></div>
+    <div class="actions">
+      <button class="btn btn-ghost btn-sm" onclick="hideModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="modal-confirm" onclick="modalAction()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const WEBDAV_PATH = '/webdav';
+let currentPath = '';
+let currentFiles = [];
+let creds = null;
+let modalCallback = null;
+
+function authHeader() {
+  if (!creds) return {};
+  return { 'Authorization': 'Basic ' + btoa(creds.user + ':' + creds.pass) };
+}
+
+async function doLogin() {
+  const user = document.getElementById('username').value.trim();
+  const pass = document.getElementById('password').value;
+  if (!user || !pass) return toast('Please enter username and password', 'error');
+
+  creds = { user, pass };
+  localStorage.setItem('webdav_creds', JSON.stringify(creds));
+
+  try {
+    const res = await fetch(WEBDAV_PATH + '/', { method: 'PROPFIND', headers: { ...authHeader(), 'Depth': '0' } });
+    if (res.status === 401) { creds = null; localStorage.removeItem('webdav_creds'); return toast('Invalid credentials', 'error'); }
+    if (res.ok || res.status === 207) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      navigate('');
+      toast('Welcome!', 'success');
+    } else {
+      toast('Login failed: ' + res.status, 'error');
+    }
+  } catch (e) {
+    toast('Connection error: ' + e.message, 'error');
+  }
+}
+
+function doLogout() {
+  creds = null;
+  localStorage.removeItem('webdav_creds');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function navigate(path) {
+  currentPath = path;
+  renderBreadcrumb();
+  const list = document.getElementById('file-list');
+  list.innerHTML = '<div class="empty"><div class="icon">Loading...</div></div>';
+
+  try {
+    const url = path ? WEBDAV_PATH + '/' + path : WEBDAV_PATH + '/';
+    const res = await fetch(url, { method: 'PROPFIND', headers: { ...authHeader(), 'Depth': '1' } });
+    if (!res.ok && res.status !== 207) throw new Error('Failed: ' + res.status);
+
+    const text = await res.text();
+    const items = parsePropfind(text);
+    currentFiles = items.filter(i => i.path !== (path ? '/' + path : '/'));
+    renderFiles();
+  } catch (e) {
+    list.innerHTML = '<div class="empty"><div class="icon">Error</div><p>' + e.message + '</p></div>';
+  }
+}
+
+function parsePropfind(xml) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const responses = doc.querySelectorAll('response');
+  const items = [];
+
+  responses.forEach(resp => {
+    const href = resp.querySelector('href')?.textContent || '';
+    const resourcetype = resp.querySelector('resourcetype');
+    const isCollection = resourcetype && resourcetype.querySelector('collection');
+    const name = resp.querySelector('displayname')?.textContent || decodeURIComponent(href.split('/').filter(Boolean).pop() || '');
+    const size = parseInt(resp.querySelector('getcontentlength')?.textContent || '0');
+    const modified = resp.querySelector('getlastmodified')?.textContent || '';
+    const contentType = resp.querySelector('getcontenttype')?.textContent || '';
+
+    items.push({ href, name, isCollection: !!isCollection, size, modified, contentType });
+  });
+  return items;
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  const parts = currentPath ? currentPath.split('/').filter(Boolean) : [];
+  let html = '<span class="' + (parts.length === 0 ? 'active' : '') + '" onclick="navigate(\'\')">Root</span>';
+  let pathAccum = '';
+  parts.forEach((part, i) => {
+    pathAccum += (pathAccum ? '/' : '') + part;
+    const isLast = i === parts.length - 1;
+    html += '<span class="sep">/</span>';
+    html += '<span class="' + (isLast ? 'active' : '') + '" onclick="navigate(\'' + pathAccum + '\')">' + part + '</span>';
+  });
+  bc.innerHTML = html;
+}
+
+function renderFiles() {
+  const list = document.getElementById('file-list');
+  const filtered = getFilteredFiles();
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="icon">Folder is empty</div><p>Upload files or create a folder to get started</p></div>';
+    return;
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.isCollection !== b.isCollection) return a.isCollection ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  list.innerHTML = sorted.map(item => {
+    const icon = item.isCollection ? 'Folder' : getFileIcon(item.name);
+    const size = item.isCollection ? '' : formatSize(item.size);
+    const date = item.modified ? new Date(item.modified).toLocaleDateString() : '';
+    const fullPath = currentPath ? currentPath + '/' + item.name : item.name;
+
+    return '<div class="file-item" ondblclick="' + (item.isCollection ? 'navigate(\'' + fullPath + '\')' : 'downloadFile(\'' + fullPath + '\')') + '">' +
+      '<div class="icon">' + icon + '</div>' +
+      '<div class="name" title="' + item.name + '">' + item.name + '</div>' +
+      '<div class="size">' + size + '</div>' +
+      '<div class="date">' + date + '</div>' +
+      '<div class="actions">' +
+        (item.isCollection ? '' : '<button onclick="event.stopPropagation();downloadFile(\'' + fullPath + '\')">Download</button>') +
+        '<button onclick="event.stopPropagation();renameItem(\'' + fullPath + '\',\'' + (item.isCollection ? 'folder' : 'file') + '\')">Rename</button>' +
+        '<button onclick="event.stopPropagation();deleteItem(\'' + fullPath + '\',\'' + (item.isCollection ? 'folder' : 'file') + '\')">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function getFilteredFiles() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  if (!q) return currentFiles;
+  return currentFiles.filter(f => f.name.toLowerCase().includes(q));
+}
+
+function filterFiles() { renderFiles(); }
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = {
+    jpg: 'Image', jpeg: 'Image', png: 'Image', gif: 'Image', webp: 'Image', svg: 'Image',
+    mp4: 'Video', webm: 'Video', mov: 'Video',
+    mp3: 'Audio', wav: 'Audio', flac: 'Audio',
+    pdf: 'Document', doc: 'Document', docx: 'Document', txt: 'Document',
+    zip: 'Archive', rar: 'Archive', '7z': 'Archive',
+    js: 'Code', ts: 'Code', py: 'Code', html: 'Code', css: 'Code',
+  };
+  return icons[ext] || 'File';
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+  return bytes.toFixed(1) + ' ' + units[i];
+}
+
+async function downloadFile(path) {
+  const url = WEBDAV_PATH + '/' + path;
+  try {
+    const res = await fetch(url, { headers: authHeader() });
+    if (!res.ok) throw new Error('Download failed');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = path.split('/').pop();
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Downloaded', 'success');
+  } catch (e) {
+    toast('Download failed: ' + e.message, 'error');
+  }
+}
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+  const progress = document.getElementById('upload-progress');
+  const fill = document.getElementById('upload-fill');
+  const text = document.getElementById('upload-text');
+  progress.style.display = 'block';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const path = currentPath ? currentPath + '/' + file.name : file.name;
+    const url = WEBDAV_PATH + '/' + path;
+
+    text.textContent = 'Uploading ' + (i + 1) + '/' + files.length + ': ' + file.name;
+    fill.style.width = ((i / files.length) * 100) + '%';
+
+    try {
+      const res = await fetch(url, { method: 'PUT', headers: authHeader(), body: file });
+      if (!res.ok && res.status !== 201 && res.status !== 204) throw new Error('Status ' + res.status);
+    } catch (e) {
+      toast('Failed to upload ' + file.name + ': ' + e.message, 'error');
+    }
+  }
+
+  fill.style.width = '100%';
+  text.textContent = 'Done!';
+  setTimeout(() => { progress.style.display = 'none'; }, 2000);
+  refresh();
+}
+
+function handleFileSelect(e) {
+  uploadFiles(Array.from(e.target.files));
+  e.target.value = '';
+}
+
+async function showNewFolderModal() {
+  document.getElementById('modal-title').textContent = 'New Folder';
+  document.getElementById('modal-body').innerHTML = '<div class="form-group"><label>Folder Name</label><input type="text" id="folder-name-input" placeholder="my-folder"></div>';
+  showModal(() => {
+    const name = document.getElementById('folder-name-input').value.trim();
+    if (!name) return toast('Please enter a folder name', 'error');
+    createFolder(name);
+    hideModal();
+  });
+}
+
+async function createFolder(name) {
+  const path = currentPath ? currentPath + '/' + name : name;
+  const url = WEBDAV_PATH + '/' + path;
+  try {
+    const res = await fetch(url, { method: 'MKCOL', headers: authHeader() });
+    if (!res.ok && res.status !== 201) throw new Error('Status ' + res.status);
+    toast('Folder created', 'success');
+    refresh();
+  } catch (e) {
+    toast('Failed to create folder: ' + e.message, 'error');
+  }
+}
+
+async function deleteItem(path, type) {
+  if (!confirm('Delete ' + type + ' "' + path.split('/').pop() + '"?')) return;
+  const url = WEBDAV_PATH + '/' + path;
+  try {
+    const res = await fetch(url, { method: 'DELETE', headers: authHeader() });
+    if (!res.ok && res.status !== 204) throw new Error('Status ' + res.status);
+    toast('Deleted', 'success');
+    refresh();
+  } catch (e) {
+    toast('Failed to delete: ' + e.message, 'error');
+  }
+}
+
+async function renameItem(path, type) {
+  const oldName = path.split('/').pop();
+  document.getElementById('modal-title').textContent = 'Rename ' + type;
+  document.getElementById('modal-body').innerHTML = '<div class="form-group"><label>New Name</label><input type="text" id="rename-input" value="' + oldName + '"></div>';
+  showModal(() => {
+    const newName = document.getElementById('rename-input').value.trim();
+    if (!newName || newName === oldName) return hideModal();
+    const parentPath = path.split('/').slice(0, -1).join('/');
+    const newPath = parentPath ? parentPath + '/' + newName : newName;
+    const url = WEBDAV_PATH + '/' + path;
+    fetch(url, { method: 'MOVE', headers: { ...authHeader(), 'Destination': window.location.origin + WEBDAV_PATH + '/' + newPath } }).then(res => {
+      if (!res.ok) throw new Error('Status ' + res.status);
+      toast('Renamed', 'success');
+      refresh();
+    }).catch(e => toast('Failed: ' + e.message, 'error'));
+    hideModal();
+  });
+}
+
+function refresh() { navigate(currentPath); }
+
+function showModal(callback) {
+  modalCallback = callback;
+  document.getElementById('modal-overlay').classList.add('show');
+  setTimeout(() => { const input = document.querySelector('#modal input'); if (input) input.focus(); }, 100);
+}
+
+function hideModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  modalCallback = null;
+}
+
+function modalAction() {
+  if (modalCallback) modalCallback();
+}
+
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// Drag & drop
+const uploadArea = document.getElementById('upload-area');
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => { e.preventDefault(); uploadArea.classList.remove('dragover'); uploadFiles(Array.from(e.dataTransfer.files)); });
+
+// Enter key on login
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
+
+// Enter key on modal
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('show')) modalAction(); });
+
+// Auto login
+(function() {
+  const saved = localStorage.getItem('webdav_creds');
+  if (saved) {
+    try {
+      creds = JSON.parse(saved);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      navigate('');
+    } catch {}
+  }
+})();
+</script>
+</body>
+</html>
