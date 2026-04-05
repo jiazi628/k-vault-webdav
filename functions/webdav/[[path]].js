@@ -16,6 +16,7 @@
 
 import { escapeXml, buildPropfindResponse, parsePropfindBody } from '../utils/webdav-xml.js';
 import { checkAuthentication, isAuthRequired, verifyBasicAuth } from '../utils/auth.js';
+import { uploadToTelegram, getTelegramFilePath, buildTelegramFileUrl } from '../utils/telegram.js';
 
 const DAV_NS = 'DAV:';
 const NS_DAV = 'd';
@@ -383,15 +384,29 @@ async function handlePut(request, env, path) {
 
   const arrayBuffer = await request.arrayBuffer();
   const fileHash = await computeFileHash(arrayBuffer);
-  const fileId = generateId('dav');
-  const kvKey = `dav:${fileId}.${getExtension(fileName)}`;
 
-  if (folderPath) {
-    const parentExists = await env.img_url.getWithMetadata(`${FOLDER_MARKER_PREFIX}${folderPath}`);
-    if (!parentExists?.metadata) {
-      return errorResponse('Parent folder does not exist', 409);
-    }
+  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
+    return await uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash);
   }
+
+  return errorResponse('No storage backend configured. Set TG_BOT_TOKEN and TG_CHAT_ID.', 500);
+}
+
+async function uploadToTelegramStorage(request, env, path, fileName, folderPath, arrayBuffer, fileHash) {
+  const blob = new Blob([arrayBuffer], { type: request.headers.get('Content-Type') || 'application/octet-stream' });
+  const file = new File([blob], fileName, { type: blob.type });
+
+  let telegramResult;
+  try {
+    telegramResult = await uploadToTelegram(file, fileName, env);
+  } catch (e) {
+    console.error('Telegram upload error:', e.message);
+    return errorResponse('Telegram upload failed: ' + e.message, 500);
+  }
+
+  const fileId = telegramResult.fileId;
+  const ext = getExtension(fileName);
+  const kvKey = `${fileId}.${ext}`;
 
   await env.img_url.put(kvKey, '', {
     metadata: {
@@ -400,8 +415,10 @@ async function handlePut(request, env, path) {
       Label: 'None',
       liked: false,
       fileName,
-      fileSize: arrayBuffer.byteLength,
-      storageType: 'webdav',
+      fileSize: telegramResult.fileSize || arrayBuffer.byteLength,
+      storageType: 'telegram',
+      telegramFileId: fileId,
+      telegramMessageId: telegramResult.messageId,
       webdavPath: path,
       webdavEtag: `"${fileHash}"`,
       folderPath: folderPath || '',
@@ -430,63 +447,54 @@ async function handleGet(request, env, path, isHead = false) {
   const metadata = record.metadata || {};
   const storageType = metadata.storageType || inferStorageType(record.name, metadata);
 
-  switch (storageType) {
-    case 'webdav':
-    case 'dav':
-      return handleWebDAVFileDownload(request, env, record, metadata, isHead);
-    case 'telegram':
-      return errorResponse('Telegram storage not supported in WebDAV mode', 501);
-    default:
-      return errorResponse(`Storage type ${storageType} not supported in WebDAV mode`, 501);
+  if (storageType === 'telegram') {
+    return handleTelegramFileDownload(request, env, record, metadata, isHead);
   }
+
+  return errorResponse(`Storage type ${storageType} not supported in WebDAV mode`, 501);
 }
 
-async function handleWebDAVFileDownload(request, env, record, metadata, isHead) {
-  const rangeHeader = request.headers.get('Range');
+async function handleTelegramFileDownload(request, env, record, metadata, isHead) {
+  const telegramFileId = metadata.telegramFileId;
+  if (!telegramFileId) {
+    return errorResponse('Telegram file ID missing', 500);
+  }
 
-  if (rangeHeader) {
-    return handleRangeRequest(request, env, record, metadata, isHead);
+  const filePath = await getTelegramFilePath(env, telegramFileId);
+  if (!filePath) {
+    return errorResponse('File not found on Telegram', 404);
   }
 
   const fileName = metadata.fileName || record.name;
   const mimeType = getMimeType(fileName);
+  const fileSize = metadata.fileSize || 0;
 
-  return new Response(isHead ? null : '', {
-    status: 200,
-    headers: {
-      'Content-Type': mimeType,
-      'Content-Length': String(metadata.fileSize || 0),
-      'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
-      'ETag': metadata.webdavEtag || '',
-      'Accept-Ranges': 'bytes',
-    },
+  const rangeHeader = request.headers.get('Range');
+  const fetchHeaders = new Headers();
+  if (rangeHeader) fetchHeaders.set('Range', rangeHeader);
+
+  const upstream = await fetch(buildTelegramFileUrl(env, filePath), {
+    method: isHead ? 'HEAD' : 'GET',
+    headers: fetchHeaders,
   });
-}
 
-async function handleRangeRequest(request, env, record, metadata, isHead) {
-  const rangeHeader = request.headers.get('Range');
-  const match = rangeHeader?.match(/bytes=(\d*)-(\d*)/);
-  if (!match) {
-    return errorResponse('Invalid Range header', 416);
+  if (!upstream.ok && upstream.status !== 206) {
+    return errorResponse('Failed to fetch file from Telegram', upstream.status);
   }
 
-  const start = match[1] ? parseInt(match[1], 10) : 0;
-  const end = match[2] ? parseInt(match[2], 10) : (metadata.fileSize || 0) - 1;
-  const contentLength = end - start + 1;
+  const headers = new Headers();
+  headers.set('Content-Type', mimeType);
+  headers.set('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
+  headers.set('Accept-Ranges', 'bytes');
+  if (upstream.headers.get('Content-Length')) headers.set('Content-Length', upstream.headers.get('Content-Length'));
+  if (upstream.headers.get('Content-Range')) headers.set('Content-Range', upstream.headers.get('Content-Range'));
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Type, Content-Disposition');
 
-  const fileName = metadata.fileName || record.name;
-  const mimeType = getMimeType(fileName);
-
-  return new Response(isHead ? null : '', {
-    status: 206,
-    headers: {
-      'Content-Type': mimeType,
-      'Content-Length': String(contentLength),
-      'Content-Range': `bytes ${start}-${end}/${metadata.fileSize || 0}`,
-      'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
-      'ETag': metadata.webdavEtag || '',
-      'Accept-Ranges': 'bytes',
-    },
+  return new Response(isHead ? null : upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers,
   });
 }
 
